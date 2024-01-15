@@ -8,6 +8,12 @@ use DTApi\Models\Distance;
 use Illuminate\Http\Request;
 use DTApi\Repository\BookingRepository;
 
+// We should employ request validation in adherence to the SOLID principle, specifically the Single Responsibility Principle.
+// always remove unnecessary code
+// variable names should be descriptive
+// if these are apis, we should write api docs as well e.g. (open api docs)
+
+
 /**
  * Class BookingController
  * @package DTApi\Http\Controllers
@@ -35,12 +41,17 @@ class BookingController extends Controller
      */
     public function index(Request $request)
     {
-        if($user_id = $request->get('user_id')) {
 
-            $response = $this->repository->getUsersJobs($user_id);
+        $request->validate($request, [
+            'user_id' => 'sometimes|numeric', // Validation rule for user_id if present
+        ]);
 
-        }
-        elseif($request->__authenticatedUser->user_type == env('ADMIN_ROLE_ID') || $request->__authenticatedUser->user_type == env('SUPERADMIN_ROLE_ID'))
+        $response = ['error' => 'Unauthorized'];
+        if($request->has('user_id')) {
+
+            $response = $this->repository->getUsersJobs($request->input('user_id'));
+
+        }elseif($request->__authenticatedUser->user_type == env('ADMIN_ROLE_ID') || $request->__authenticatedUser->user_type == env('SUPERADMIN_ROLE_ID'))
         {
             $response = $this->repository->getAll($request);
         }
@@ -93,7 +104,6 @@ class BookingController extends Controller
      */
     public function immediateJobEmail(Request $request)
     {
-        $adminSenderEmail = config('app.adminemail');
         $data = $request->all();
 
         $response = $this->repository->storeJobEmail($data);
@@ -194,60 +204,33 @@ class BookingController extends Controller
 
     public function distanceFeed(Request $request)
     {
-        $data = $request->all();
-
-        if (isset($data['distance']) && $data['distance'] != "") {
-            $distance = $data['distance'];
-        } else {
-            $distance = "";
-        }
-        if (isset($data['time']) && $data['time'] != "") {
-            $time = $data['time'];
-        } else {
-            $time = "";
-        }
-        if (isset($data['jobid']) && $data['jobid'] != "") {
-            $jobid = $data['jobid'];
-        }
-
-        if (isset($data['session_time']) && $data['session_time'] != "") {
-            $session = $data['session_time'];
-        } else {
-            $session = "";
-        }
-
-        if ($data['flagged'] == 'true') {
-            if($data['admincomment'] == '') return "Please, add comment";
-            $flagged = 'yes';
-        } else {
-            $flagged = 'no';
-        }
         
-        if ($data['manually_handled'] == 'true') {
-            $manually_handled = 'yes';
-        } else {
-            $manually_handled = 'no';
+        $job_id = $request->input('jobid');
+
+        if (empty($job_id)) {
+            return response('Job ID is required!');
         }
 
-        if ($data['by_admin'] == 'true') {
-            $by_admin = 'yes';
-        } else {
-            $by_admin = 'no';
+        $distance = $request->filled('distance') ? $request->input('distance') : "";
+        $time = $request->filled('time') ? $request->input('time') : "";
+        $session = $request->filled('session_time') ? $request->input('session_time') : "";
+        $flagged = $request->boolean('flagged') ? 'yes' : 'no';
+        $manually_handled = $request->boolean('manually_handled') ? 'yes' : 'no';
+        $by_admin = $request->boolean('by_admin') ? 'yes' : 'no';
+        $admin_comment = $request->filled('admincomment') ? $request->input('admincomment') : "";
+
+        if ($flagged === 'yes' && empty($admin_comment)) {
+            return response('Please add a comment when flagging.');
         }
 
-        if (isset($data['admincomment']) && $data['admincomment'] != "") {
-            $admincomment = $data['admincomment'];
-        } else {
-            $admincomment = "";
-        }
         if ($time || $distance) {
 
-            $affectedRows = Distance::where('job_id', '=', $jobid)->update(array('distance' => $distance, 'time' => $time));
+            Distance::where('job_id', '=', $job_id)->update(array('distance' => $distance, 'time' => $time));
         }
 
-        if ($admincomment || $session || $flagged || $manually_handled || $by_admin) {
+        if ($admin_comment || $session || $flagged || $manually_handled || $by_admin) {
 
-            $affectedRows1 = Job::where('id', '=', $jobid)->update(array('admin_comments' => $admincomment, 'flagged' => $flagged, 'session_time' => $session, 'manually_handled' => $manually_handled, 'by_admin' => $by_admin));
+            Job::where('id', '=', $job_id)->update(array('admin_comments' => $admin_comment, 'flagged' => $flagged, 'session_time' => $session, 'manually_handled' => $manually_handled, 'by_admin' => $by_admin));
 
         }
 
